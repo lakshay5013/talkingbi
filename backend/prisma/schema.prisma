@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  trial
+  plus
+  max
+  max_plus
+  pro_max
+}
+
+enum UsageType {
+  dashboard_generation
+  chat
+}
+
+model User {
+  id        String      @id @default(uuid())
+  email     String      @unique
+  password  String
+  consent   Boolean     @default(false)
+  plan      Plan        @default(trial)
+  dbUrl     String?
+  createdAt DateTime    @default(now())
+  dashboards Dashboard[]
+  usageEvents UsageEvent[]
+}
+
+model Dashboard {
+  id        String   @id @default(uuid())
+  userId    String
+  config    Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model UsageEvent {
+  id        String    @id @default(uuid())
+  userId    String
+  type      UsageType
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, createdAt])
+}
