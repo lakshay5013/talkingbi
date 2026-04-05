@@ -76,6 +76,7 @@ export default function App() {
   const profileMenuRef = useRef(null);
   const plan = mapPlanToUiPlan(user?.plan);
   const currentPlanId = user?.plan || 'trial';
+  const isTrialPlan = currentPlanId === 'trial';
   const hasDatasetLink = Boolean(databaseInfo?.connected);
 
   const loadSavedDashboards = async () => {
@@ -204,6 +205,14 @@ export default function App() {
       })
     );
   }, [plan]);
+
+  useEffect(() => {
+    if (!isTrialPlan) return;
+    setIsChatOpen(false);
+    if (activeNav === 'chat') {
+      setActiveNav('dashboard');
+    }
+  }, [activeNav, isTrialPlan]);
 
   const handleQuerySubmit = (query) => {
     apiPost('/api/usage/check-dashboard', {})
@@ -439,6 +448,12 @@ export default function App() {
   }, [dashboardKpis]);
 
   const handleNavChange = (next) => {
+    if (next === 'chat' && isTrialPlan) {
+      setIsChatOpen(false);
+      setActiveNav('dashboard');
+      return;
+    }
+
     setActiveNav(next);
     setActiveScreen('dashboard');
 
@@ -502,6 +517,7 @@ export default function App() {
         onToggleChat={() => setIsChatOpen((prev) => !prev)}
         isChatOpen={isChatOpen}
         plan={plan}
+        isTrialPlan={isTrialPlan}
       />
 
       <div className="app-main-column">

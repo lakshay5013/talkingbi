@@ -885,6 +885,39 @@ function normalizeRowsToSeries(rows = []) {
     .slice(0, 100);
 }
 
+function buildDbAnswerFromSeries(series, query, rowCount) {
+  const q = String(query || '').toLowerCase();
+  const top = series[0];
+  const second = series[1];
+  const bottom = series[series.length - 1];
+
+  const formatValue = (value) => Number(value || 0).toLocaleString();
+
+  if (/how many|count|number of|total rows|total records|records?\b/.test(q)) {
+    return `Connected DB: ${rowCount} matching row${rowCount === 1 ? '' : 's'} returned.`;
+  }
+
+  if (/least|lowest|bottom|min(imum)?|smallest/.test(q) && bottom) {
+    return `Connected DB: Lowest is ${bottom.name} with value ${formatValue(bottom.value)}.`;
+  }
+
+  if (/compare|vs|between|difference|top and bottom/.test(q) && top && bottom) {
+    const gap = Math.abs(Number(top.value || 0) - Number(bottom.value || 0));
+    return `Connected DB: Top is ${top.name} with value ${formatValue(top.value)} and bottom is ${bottom.name} with value ${formatValue(bottom.value)}. Gap: ${formatValue(gap)}.`;
+  }
+
+  if (/trend|over time|monthly|month|year|timeline|growth/.test(q) && top && second) {
+    return `Connected DB: ${series.length} points returned. First is ${top.name} with value ${formatValue(top.value)}, next is ${second.name} with value ${formatValue(second.value)}.`;
+  }
+
+  if (top) {
+    const extra = second ? ` Next is ${second.name} with value ${formatValue(second.value)}.` : '';
+    return `Connected DB: ${rowCount} row${rowCount === 1 ? '' : 's'} returned. Top is ${top.name} with value ${formatValue(top.value)}.${extra}`;
+  }
+
+  return 'Connected DB query executed successfully.';
+}
+
 function chooseChartTypeFromRows(rows = []) {
   if (!rows.length) return 'bar';
   const keys = Object.keys(rows[0]);
@@ -1685,10 +1718,11 @@ async function getUserDbAnalytics(user, query, filters = {}) {
 
   try {
     debugLog('SQL_GEN', `query="${query.substring(0, 50)}..."`);
-    // Deterministic-first improves repeatability and reduces wrong SQL for unknown schemas.
-    rawSql = fallbackSqlFromSchema(query, conn.schema);
-    if (!rawSql && isComplexUserDbQuery(query)) {
+    if (isComplexUserDbQuery(query)) {
       rawSql = await generateSqlFromNl({ query, schema: conn.schema });
+    }
+    if (!rawSql) {
+      rawSql = fallbackSqlFromSchema(query, conn.schema);
     }
     sql = sanitizeSql(rawSql);
 
@@ -1704,8 +1738,8 @@ async function getUserDbAnalytics(user, query, filters = {}) {
     debugLog('SQL_FAIL', sqlErr.message);
     try {
       const candidates = [
-        sanitizeSql(fallbackSqlFromSchema(query, conn.schema)),
         sanitizeSql(await generateSqlFromNl({ query, schema: conn.schema })),
+        sanitizeSql(fallbackSqlFromSchema(query, conn.schema)),
       ].filter(Boolean);
 
       if (!candidates.length) throw new Error('Fallback SQL generation also failed');
@@ -1767,13 +1801,14 @@ async function getUserDbAnalytics(user, query, filters = {}) {
     debugLog('SUCCESS', `chart=${chartType}, top=${top.name} (${top.value})`);
 
     return {
-      answer: top
-        ? `Connected DB: Top is ${top.name} with value ${Number(top.value).toLocaleString()}.`
-        : 'Connected DB query executed successfully.',
+      answer: buildDbAnswerFromSeries(series, query, rows.length),
       sql: finalSql,
       data: series,
       chartType,
-      insights: top ? [`Top: ${top.name} (${Number(top.value).toLocaleString()})`] : [],
+      insights: top ? [
+        `Top: ${top.name} (${Number(top.value).toLocaleString()})`,
+        ...(series[1] ? [`Runner-up: ${series[1].name} (${Number(series[1].value).toLocaleString()})`] : []),
+      ] : [],
       provider: 'user-db-engine',
     };
   } catch (serieErr) {

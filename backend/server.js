@@ -1324,33 +1324,20 @@ app.post('/api/chat', async (req, res) => {
 
         // Get/update session context for follow-ups
         const session = getSession(sessionId);
-        
-        // TRY LLM-BASED SQL GENERATION FIRST FOR 100% ACCURACY
-        const llmGeneratedSql = await generateSQLFromQuery(lowerQuery, filters);
-        if (llmGeneratedSql) {
-            try {
-                const data = await cachedQuery(llmGeneratedSql, []);
-                if (data && data.length > 0) {
-                    // Successfully got data from LLM-generated SQL
-                    console.log('[LLM SQL SUCCESS]', lowerQuery);
-                    const chartType = data.length <= 1 ? null : (data.length <= 4 ? 'pie' : 'bar');
-                    return res.json({
-                        answer: `Found ${data.length} result${data.length !== 1 ? 's' : ''} for your query.`,
-                        sql: llmGeneratedSql,
-                        data: data.slice(0, 50),
-                        chartType: chartType,
-                        parsedQuery: { source: 'llm_generated' },
-                        insights: [],
-                        provider: 'llm-sql-engine',
-                    });
-                }
-            } catch (err) {
-                console.warn('[LLM SQL EXECUTION ERROR]', err.message);
-                // Fall back to regex parsing if LLM SQL fails
-            }
+
+        if (!isLikelyDatabaseQuestion(lowerQuery)) {
+            return res.json({
+                answer: 'I can answer only database-related questions for this project. Please ask about sales, profit, orders, categories, states, monthly trends, or similar data metrics.',
+                sql: '',
+                data: [],
+                chartType: null,
+                parsedQuery: { source: 'db-guard' },
+                insights: [],
+                provider: 'rule-based',
+            });
         }
-        
-        // FALLBACK TO REGEX-BASED PARSING
+
+        // Deterministic NLP parsing + SQL generation
         const parsed = parseQuery(lowerQuery, session.context);
 
         // Update session context with latest parsed values
@@ -1374,13 +1361,12 @@ app.post('/api/chat', async (req, res) => {
                 const metricLabel = { sales: 'total sales revenue', profit: 'total profit', orders: 'total orders', quantity: 'total units sold', aov: 'average order value' }[metric] || metric;
                 const formatted = metric === 'orders' || metric === 'quantity' ? Number(val).toLocaleString('en-IN') : `₹${Number(val).toLocaleString('en-IN')}`;
                 const defaultAnswer = `The ${metricLabel} is ${formatted}.`;
-                const llm = await maybeGroqAnswer({ query: lowerQuery, parsed, data, insights: [`${metricLabel}: ${formatted}`], defaultAnswer });
                 return res.json({
-                    answer: llm.answer,
+                    answer: defaultAnswer,
                     sql, data: [], chartType: null,
                     parsedQuery: parsed,
                     insights: [`Total ${metricLabel}: ${formatted}`],
-                    provider: llm.provider,
+                    provider: 'rule-based',
                 });
             }
         }
@@ -1406,13 +1392,12 @@ app.post('/api/chat', async (req, res) => {
             const metricLabel = { sales: 'total sales revenue', profit: 'total profit', orders: 'total orders', quantity: 'total units sold', aov: 'average order value' }[metric] || metric;
             const formatted = metric === 'orders' || metric === 'quantity' ? Number(val).toLocaleString('en-IN') : `₹${Number(val).toLocaleString('en-IN')}`;
             const defaultAnswer = `The ${metricLabel} is ${formatted}.`;
-            const llm = await maybeGroqAnswer({ query: lowerQuery, parsed, data, insights: [`${metricLabel}: ${formatted}`], defaultAnswer });
             return res.json({
-                answer: llm.answer,
+                answer: defaultAnswer,
                 sql, data: [], chartType: null,
                 parsedQuery: parsed,
                 insights: [`${metricLabel}: ${formatted}`],
-                provider: llm.provider,
+                provider: 'rule-based',
             });
         }
 
@@ -1432,14 +1417,12 @@ app.post('/api/chat', async (req, res) => {
             answer += ` ${rankLabel}: ${top.name} with ${formatMetricValue(metric, top.value)}.`;
         }
 
-        const llm = await maybeGroqAnswer({ query: lowerQuery, parsed, data, insights: autoInsights, defaultAnswer: answer });
-
         res.json({
-            answer: llm.answer,
+            answer,
             sql, data, chartType,
             parsedQuery: parsed,
             insights: autoInsights,
-            provider: llm.provider,
+            provider: 'rule-based',
         });
     } catch (err) {
         console.error('[CHAT ERROR]', err.message);
@@ -1500,20 +1483,26 @@ function generateAutoInsights(data, parsed) {
 }
 
 async function handleFallbackQuery(lowerQuery, filters, res) {
-    // Route unrecognized queries to Groq for open-ended analysis
-    const llm = await maybeGroqAnswer({
-        query: lowerQuery,
-        parsed: null,
-        data: [],
-        insights: [],
-        defaultAnswer: "I can help you analyze your sales data! Try asking about: sales, profit, categories, states, monthly trends, payment modes, or predictions. You can also say things like 'Show last 1 year clothing sales by month' or 'What trends do you see?'",
-        isOpenEnded: true,
-    });
+    const defaultAnswer = "I can answer only from your connected database. Try questions like: 'top 5 categories by sales', 'monthly profit trend', or 'state-wise order count'.";
     return res.json({
-        answer: llm.answer,
+        answer: defaultAnswer,
         sql: '', data: [], chartType: null, insights: [],
-        provider: llm.provider,
+        provider: 'rule-based',
     });
+}
+
+function isLikelyDatabaseQuestion(lowerQuery = '') {
+    if (!lowerQuery) return false;
+
+    const keywords = [
+        'sales', 'revenue', 'profit', 'order', 'orders', 'customer', 'customers',
+        'amount', 'qty', 'quantity', 'category', 'sub category', 'state', 'city',
+        'month', 'monthly', 'trend', 'payment', 'b2b', 'b2c', 'dashboard',
+        'top', 'bottom', 'highest', 'lowest', 'compare', 'growth', 'decline',
+        'data', 'database', 'table', 'record', 'sku'
+    ];
+
+    return keywords.some((kw) => lowerQuery.includes(kw));
 }
 
 // ==========================================

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BarChart3, LayoutDashboard, Lightbulb, MessageSquare, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { BarChart3, LayoutDashboard, Lightbulb, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -9,8 +9,7 @@ const navItems = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab, onToggleChat, isChatOpen, plan }) {
-  const isTrialPlan = plan === 'Free' || plan === 'Trial';
+export default function Sidebar({ activeTab, setActiveTab, onToggleChat, isChatOpen, plan, isTrialPlan }) {
   
   return (
     <aside className="app-sidebar">
@@ -27,17 +26,34 @@ export default function Sidebar({ activeTab, setActiveTab, onToggleChat, isChatO
           <button
             key={id}
             type="button"
-            onClick={() => setActiveTab(id)}
-            className={`sidebar-nav-item ${activeTab === id ? 'active' : ''}`}
+            onClick={() => {
+              if (id === 'chat' && isTrialPlan) return;
+              setActiveTab(id);
+            }}
+            className={`sidebar-nav-item ${activeTab === id ? 'active' : ''} ${id === 'chat' && isTrialPlan ? 'locked' : ''}`}
+            disabled={id === 'chat' && isTrialPlan}
+            title={id === 'chat' && isTrialPlan ? 'Chat is locked on Trial plan' : label}
           >
             <Icon size={18} />
             <span>{label}</span>
+            {id === 'chat' && isTrialPlan ? <Lock size={14} /> : null}
           </button>
         ))}
       </nav>
 
-      {!isTrialPlan && (
-        <button type="button" className="chat-toggle" onClick={onToggleChat}>
+      <button
+        type="button"
+        className={`chat-toggle ${isTrialPlan ? 'locked' : ''}`}
+        onClick={isTrialPlan ? undefined : onToggleChat}
+        disabled={isTrialPlan}
+        title={isTrialPlan ? 'Chat is locked on Trial plan' : 'Toggle chat'}
+      >
+        {isTrialPlan ? (
+          <span className="chat-toggle-content locked-state">
+            <Lock size={16} />
+            Chat Locked
+          </span>
+        ) : (
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
               key={isChatOpen ? 'close' : 'open'}
@@ -51,8 +67,8 @@ export default function Sidebar({ activeTab, setActiveTab, onToggleChat, isChatO
               {isChatOpen ? 'Hide Chat' : 'Open Chat'}
             </motion.span>
           </AnimatePresence>
-        </button>
-      )}
+        )}
+      </button>
     </aside>
   );
 }
