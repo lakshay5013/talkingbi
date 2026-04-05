@@ -6,7 +6,7 @@ import { apiPost } from '../api';
 const FREE_QUEUE_MIN_SEC = 10;
 const FREE_QUEUE_MAX_SEC = 15;
 
-export default function ChatbotV2({ isOpen, onClose, plan, filters }) {
+export default function ChatbotV2({ isOpen, onClose, plan, filters, onUsageRefresh }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', text: "Systems online. I'm ready to analyze your datasets. Try asking follow-up questions — I'll remember context!", id: 1 }
   ]);
@@ -95,6 +95,10 @@ export default function ChatbotV2({ isOpen, onClose, plan, filters }) {
         sessionId: sessionIdRef.current,
         usageType: 'chat',
       });
+
+      if (typeof onUsageRefresh === 'function') {
+        onUsageRefresh();
+      }
 
       const reply = response?.answer || 'I could not generate a response for that query.';
       const insights = response?.insights || [];

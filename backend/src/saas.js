@@ -37,12 +37,12 @@ const PLAN_RULES = {
   plus: {
     dashboardLimit: { count: 3, windowDays: 7 },
     storage: { enabled: false, retentionDays: 0 },
-    chatLimit: null,
+    chatLimit: { count: 10, windowDays: 30 },
   },
   max: {
     dashboardLimit: { count: 10, windowDays: 30 },
     storage: { enabled: true, retentionDays: 30 },
-    chatLimit: { count: 300, windowDays: 30 },
+    chatLimit: { count: 20, windowDays: 30 },
   },
   max_plus: {
     dashboardLimit: { count: 30, windowDays: 30 },

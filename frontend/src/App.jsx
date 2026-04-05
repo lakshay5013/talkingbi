@@ -544,6 +544,13 @@ export default function App() {
               </div>
             )}
 
+            {usage?.chat?.limit !== null && (
+              <div className="quota-chip">
+                <Sparkles size={14} />
+                {Math.max(0, usage?.chat?.remaining || 0)} chats left
+              </div>
+            )}
+
             <div className="plan-chip current">Current Plan: {formatPlanLabel(currentPlanId)}</div>
 
             <button
@@ -863,6 +870,7 @@ export default function App() {
         onClose={() => setIsChatOpen(false)}
         plan={plan}
         filters={activeFilters}
+        onUsageRefresh={loadUsage}
       />
     </div>
   );
